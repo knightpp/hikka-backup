@@ -4,6 +4,7 @@ defmodule HikkaBackup do
     run(token)
   end
 
+  @spec run(String.t()) :: :ok
   def run(token) when token != "" do
     req = Req.new(base_url: "https://api.hikka.io/") |> Req.Request.put_header("auth", token)
     %{status: 200, body: %{"username" => user}} = Req.get!(req, url: "/user/me")
@@ -25,10 +26,12 @@ defmodule HikkaBackup do
   #   end)
   # end
 
+  @spec fetch_watch(Req.Request.t(), String.t()) :: [map()]
   defp fetch_watch(req, user) do
     collect_all_pages(Req.merge(req, url: "/watch/:user/list", path_params: [user: user]))
   end
 
+  @spec fetch_read(Req.Request.t(), String.t()) :: [map()]
   defp fetch_read(req, user) do
     ["manga", "novel"]
     |> Enum.flat_map(fn type ->

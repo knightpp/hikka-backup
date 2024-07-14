@@ -23,7 +23,8 @@ defmodule HikkaBackup.MixProject do
   defp deps do
     [
       {:req, "~> 0.5.2"},
-      {:jason, "~> 1.4"}
+      {:jason, "~> 1.4"},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 end
