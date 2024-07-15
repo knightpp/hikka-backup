@@ -112,8 +112,11 @@ defmodule HikkaBackup do
 
     rest =
       2..pages//1
-      |> Enum.map(fn page -> Task.async(fn -> fetch_page(req, page)["list"] end) end)
-      |> Enum.map(&Task.await/1)
+      |> Task.async_stream(fn page -> fetch_page(req, page)["list"] end,
+        max_concurrency: 4,
+        ordered: false
+      )
+      |> Enum.map(fn {:ok, list} -> list end)
 
     [head | rest]
   end
