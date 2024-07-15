@@ -29,3 +29,4 @@ hikka_backup-*.tar
 /hikka_backup
 
 /*.json
+/.env
