@@ -1,4 +1,6 @@
 defmodule HikkaBackup do
+  use Application
+
   defmodule S3Creds do
     @enforce_keys [:account_id, :key_id, :access_key]
     defstruct [:account_id, :key_id, :access_key]
@@ -6,6 +8,12 @@ defmodule HikkaBackup do
     @type t :: %__MODULE__{account_id: String.t(), key_id: String.t(), access_key: String.t()}
   end
 
+  def start(_type, args) do
+    main(args)
+    Supervisor.start_link([], strategy: :one_for_one)
+  end
+
+  @spec main(any()) :: :ok
   def main(_args) do
     token = System.fetch_env!("TOKEN")
 
@@ -98,18 +106,21 @@ defmodule HikkaBackup do
 
     req = Req.merge(req, params: [size: 100], body: "{}")
 
-    %{status: 200, body: body} = Req.post!(req)
+    %{"pagination" => %{"pages" => pages, "total" => total}, "list" => head} = fetch_page(req, 1)
 
-    pages = body["pagination"]["pages"]
-    IO.puts("Found #{pages} pages, containing #{body["pagination"]["total"]} entries")
+    IO.puts("Found #{pages} pages, containing #{total} entries")
 
     rest =
-      Enum.map(2..pages//1, fn page ->
-        IO.puts("Fetching #{page} page...")
-        %{status: 200, body: body} = Req.post!(req, params: [page: page])
-        body["list"]
-      end)
+      2..pages//1
+      |> Enum.map(fn page -> Task.async(fn -> fetch_page(req, page)["list"] end) end)
+      |> Enum.map(&Task.await/1)
 
-    [body["list"] | rest]
+    [head | rest]
+  end
+
+  defp fetch_page(req, page) do
+    IO.puts("Fetching #{page} page...")
+    %{status: 200, body: body} = Req.post!(req, params: [page: page])
+    body
   end
 end
