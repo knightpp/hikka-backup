@@ -66,7 +66,7 @@ defmodule HikkaBackup do
       Req.put!(req,
         url: "/hikka/#{name}",
         body: content,
-        headers: [content_length: byte_size(content)]
+        headers: [content_length: byte_size(content), content_type: "application/json"]
       )
 
     :ok
@@ -92,7 +92,9 @@ defmodule HikkaBackup do
 
   @spec collect_all_pages(Req.Request.t()) :: [map()]
   defp collect_all_pages(req) do
-    IO.puts("Processing #{req.url |> URI.to_string()} with path params #{inspect(req.options.path_params)}...")
+    IO.puts(
+      "Processing #{req.url |> URI.to_string()} with path params #{inspect(req.options.path_params)}..."
+    )
 
     req = Req.merge(req, params: [size: 100], body: "{}")
 
