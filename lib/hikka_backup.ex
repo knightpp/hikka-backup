@@ -9,8 +9,23 @@ defmodule HikkaBackup do
   end
 
   def start(_type, args) do
-    main(args)
-    Supervisor.start_link([], strategy: :one_for_one)
+    Supervisor.start_link([{__MODULE__, [args]}],
+      strategy: :one_for_one,
+      auto_shutdown: :any_significant
+    )
+  end
+
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, opts},
+      restart: :temporary,
+      significant: true
+    }
+  end
+
+  def start_link(opts) do
+    Task.start_link(fn -> main(opts) end)
   end
 
   @spec main(any()) :: :ok
