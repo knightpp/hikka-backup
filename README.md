@@ -5,6 +5,7 @@ This application will help you backup your hikka.io lists.
 ## Compilation
 
 ```shell
+mix deps.get --only prod
 MIX_ENV=prod mix escript.build
 ```
 
