@@ -46,20 +46,18 @@ defmodule HikkaBackup do
     req = Req.new(base_url: "https://api.hikka.io/") |> Req.Request.put_header("auth", token)
     %{status: 200, body: %{"username" => user}} = Req.get!(req, url: "/user/me")
 
-    IO.puts("Hello, #{user}! Backing up your data ...")
-
-    anime = fetch_watch(req, user) |> Jason.encode!()
-    manga = fetch_read(req, user) |> Jason.encode!()
-
     ts = DateTime.utc_now() |> DateTime.to_iso8601()
 
-    files = [{"anime-#{ts}.json", anime}, {"manga-#{ts}.json", manga}]
+    IO.puts("Hello, #{user}! Backing up your data ...")
 
-    files
-    |> Enum.map(fn {path, content} ->
-      Task.async(fn -> upload_s3!(s3_creds, path, content) end)
-    end)
-    |> Task.await_many(15000)
+    [{:watch, &fetch_watch/2}, {:read, &fetch_read/2}]
+    |> Task.async_stream(
+      fn {tag, fetcher} ->
+        fetcher.(req, user) |> Jason.encode!() |> upload_s3!("#{tag}-#{ts}.json", s3_creds)
+      end,
+      ordered: false
+    )
+    |> Stream.run()
 
     # files
     # |> Enum.map(fn {path, content} -> File.write!(path, content) end)
@@ -68,8 +66,8 @@ defmodule HikkaBackup do
     :ok
   end
 
-  @spec upload_s3!(HikkaBackup.S3Creds.t(), String.t(), String.t()) :: :ok
-  def upload_s3!(creds, name, content) do
+  @spec upload_s3!(String.t(), String.t(), HikkaBackup.S3Creds.t()) :: :ok
+  defp upload_s3!(content, name, creds) do
     options = [
       access_key_id: creds.key_id,
       secret_access_key: creds.access_key,
@@ -83,7 +81,7 @@ defmodule HikkaBackup do
         aws_sigv4: options
       )
 
-    IO.puts("Uploading #{name} of size #{byte_size(content)} bytes")
+    IO.puts("Uploading #{name} of size #{byte_size(content)} bytes...")
 
     %{status: 200} =
       Req.put!(req,
