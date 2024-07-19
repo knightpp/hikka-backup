@@ -15,7 +15,7 @@ defmodule HikkaBackup.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      mod: {HikkaBackup, []},
+      # mod: {HikkaBackup, []},
       extra_applications: [:logger]
     ]
   end
