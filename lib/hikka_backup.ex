@@ -125,7 +125,7 @@ defmodule HikkaBackup do
 
     rest =
       2..pages//1
-      |> Task.async_stream(fn page -> fetch_page(req, page)["list"] end,
+      |> Task.async_stream(fn page -> %{"list" => list} = fetch_page(req, page) end,
         max_concurrency: 4,
         ordered: false
       )
