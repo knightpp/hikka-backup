@@ -88,8 +88,11 @@ defmodule HikkaBackup do
 
     url =
       case creds.url do
-        :r2 when creds.account_id != nil -> "https://#{creds.account_id}.r2.cloudflarestorage.com/backup"
-        url when url != nil -> url
+        :r2 when creds.account_id != nil ->
+          "https://#{creds.account_id}.r2.cloudflarestorage.com/backup"
+
+        url when url != nil ->
+          url
       end
 
     req = Req.new(base_url: url, aws_sigv4: options)
