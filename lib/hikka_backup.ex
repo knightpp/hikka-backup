@@ -1,11 +1,26 @@
 defmodule HikkaBackup do
-  use Application
+  use Application, restart: :temporary, significant: true
+
+  defmodule Creds do
+    alias HikkaBackup.S3Creds
+
+    @enforce_keys [:token, :s3]
+    defstruct [:token, :s3]
+
+    @type t :: %__MODULE__{token: String.t(), s3: S3Creds.t()}
+  end
 
   defmodule S3Creds do
-    @enforce_keys [:account_id, :key_id, :access_key]
-    defstruct [:account_id, :key_id, :access_key]
+    @enforce_keys [:key_id, :access_key]
+    defstruct [:account_id, :key_id, :access_key, region: "auto", url: :r2]
 
-    @type t :: %__MODULE__{account_id: String.t(), key_id: String.t(), access_key: String.t()}
+    @type t :: %__MODULE__{
+            account_id: String.t(),
+            key_id: String.t(),
+            access_key: String.t(),
+            region: String.t(),
+            url: :r2 | String.t()
+          }
   end
 
   def start(_type, args) do
@@ -15,35 +30,31 @@ defmodule HikkaBackup do
     )
   end
 
-  def child_spec(opts) do
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, opts},
-      restart: :temporary,
-      significant: true
-    }
-  end
-
   def start_link(opts) do
     Task.start_link(fn -> main(opts) end)
   end
 
   @spec main(any()) :: :ok
   def main(_args) do
-    token = System.fetch_env!("TOKEN")
-
-    s3_creds = %S3Creds{
-      account_id: System.fetch_env!("CLOUDFLARE_ACCOUNT_ID"),
-      key_id: System.fetch_env!("S3_ACCESS_KEY_ID"),
-      access_key: System.fetch_env!("S3_SECRET_ACCESS_KEY")
+    creds = %Creds{
+      token: System.fetch_env!("TOKEN"),
+      s3: %S3Creds{
+        key_id: System.fetch_env!("S3_ACCESS_KEY_ID"),
+        access_key: System.fetch_env!("S3_SECRET_ACCESS_KEY"),
+        account_id: System.get_env("CLOUDFLARE_ACCOUNT_ID", nil),
+        url: System.get_env("S3_URL") || :r2,
+        region: System.get_env("S3_REGION", "auto")
+      }
     }
 
-    run(token, s3_creds)
+    run(creds)
   end
 
-  @spec run(String.t(), HikkaBackup.S3Creds.t()) :: :ok
-  def run(token, s3_creds) when token != "" do
-    req = Req.new(base_url: "https://api.hikka.io/") |> Req.Request.put_header("auth", token)
+  @spec run(Creds.t()) :: :ok
+  def run(creds) when creds.token != "" do
+    req =
+      Req.new(base_url: "https://api.hikka.io/") |> Req.Request.put_header("auth", creds.token)
+
     %{status: 200, body: %{"username" => user}} = Req.get!(req, url: "/user/me")
 
     ts = DateTime.utc_now() |> DateTime.to_iso8601()
@@ -53,7 +64,7 @@ defmodule HikkaBackup do
     [{:watch, &fetch_watch/2}, {:read, &fetch_read/2}]
     |> Task.async_stream(
       fn {tag, fetcher} ->
-        fetcher.(req, user) |> Jason.encode!() |> upload_s3!("#{tag}-#{ts}.json", s3_creds)
+        fetcher.(req, user) |> Jason.encode!() |> upload_s3!("#{tag}-#{ts}.json", creds.s3)
       end,
       ordered: false
     )
@@ -66,20 +77,22 @@ defmodule HikkaBackup do
     :ok
   end
 
-  @spec upload_s3!(String.t(), String.t(), HikkaBackup.S3Creds.t()) :: :ok
+  @spec upload_s3!(String.t(), String.t(), S3Creds.t()) :: :ok
   defp upload_s3!(content, name, creds) do
     options = [
       access_key_id: creds.key_id,
       secret_access_key: creds.access_key,
       service: :s3,
-      region: "auto"
+      region: creds.region
     ]
 
-    req =
-      Req.new(
-        base_url: "https://#{creds.account_id}.r2.cloudflarestorage.com/backup",
-        aws_sigv4: options
-      )
+    url =
+      case creds.url do
+        :r2 when creds.account_id != nil -> "https://#{creds.account_id}.r2.cloudflarestorage.com/backup"
+        url when url != nil -> url
+      end
+
+    req = Req.new(base_url: url, aws_sigv4: options)
 
     IO.puts("Uploading #{name} of size #{byte_size(content)} bytes...")
 
