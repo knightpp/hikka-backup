@@ -66,7 +66,8 @@ defmodule HikkaBackup do
       fn {tag, fetcher} ->
         fetcher.(req, user) |> Jason.encode!() |> upload_s3!("#{tag}-#{ts}.json", creds.s3)
       end,
-      ordered: false
+      ordered: false,
+      timeout: 30_000
     )
     |> Stream.run()
 
@@ -143,7 +144,8 @@ defmodule HikkaBackup do
       2..pages//1
       |> Task.async_stream(fn page -> fetch_page(req, page) |> Map.fetch!("list") end,
         max_concurrency: 4,
-        ordered: false
+        ordered: false,
+        timeout: 15_000
       )
       |> Enum.map(fn {:ok, list} -> list end)
 
