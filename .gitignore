@@ -31,3 +31,4 @@ hikka_backup-*.tar
 /*.json
 /.env
 /run.sh
+/result
